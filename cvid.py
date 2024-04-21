@@ -9,6 +9,25 @@ import tempfile
 PATTERN_VIDEO_NAME = re.compile(r"^\d{8}_(\d{10})_NF.MP4$", flags=re.I)
 FORMAT_TIMESTAMP = "%y%m%d%H%M"
 
+class VideoPart:
+    def __init__(self, path: Path, timestamp: int, is_front: str, is_event: bool) -> None:
+        self.path = path
+
+        # タイムスタンプ。分単位の整数（エポック秒を 60 でわったもの）。
+        self.timestamp = timestamp
+        self.is_event = is_event
+        self.is_front = is_front
+
+    def __lt__(self, another: "VideoPart"):
+        if self.is_front != another.is_front:
+            return self.is_front
+        
+        return self.timestamp < another.timestamp
+    
+    def is_next_to(self, another: "VideoPart"):
+        return self.is_front == another.is_front and (another.timestamp != (self.timestamp - 1))
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("videos")
 parser.add_argument("destination")
@@ -67,6 +86,7 @@ def main():
     paths = sorted([video for video in videos.glob("*.mp4") if PATTERN_VIDEO_NAME.search(video.name)], key=lambda p: p.stem[9:])
     groups = group_videos(paths)
     
+    print(f"Concatenating {len(groups)} groups...")
     for group in groups:
         timestamp = datetime.strptime(PATTERN_VIDEO_NAME.search(group[0].name)[1], FORMAT_TIMESTAMP)
         timestamp.replace(year=2000 + timestamp.year)
@@ -76,6 +96,7 @@ def main():
             print(f"File {output.name} already exists. Skipped.", file=sys.stderr)
             continue
 
+        print(f"Concatenating {len(group)} video(s)...")
         concatenate_videos(group, output)
 
 if __name__ == "__main__":
