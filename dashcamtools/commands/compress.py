@@ -1,39 +1,135 @@
+import _csv
 import argparse
-from datetime import datetime
+import csv
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
-import tempfile
-from win32_setctime import setctime
+import time 
+import traceback
 
+from dashcamtools.util import iso8601, temporary_path
+
+
+null_path = Path("NUL" if os.name == "nt" else "/dev/null")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("source_dir", metavar="source-dir", type=Path)
 parser.add_argument("target_dir", metavar="target-dir", type=Path)
+parser.add_argument("trash_dir", metavar="trash-dir", type=Path)
+parser.add_argument("--report", type=Path)
 
 args = parser.parse_args()
 
 source_dir: Path = args.source_dir
-target_dir: Path = args.destination
+target_dir: Path = args.target_dir
+trash_dir: Path = args.trash_dir
+report: Path = args.report if args.report is not None else null_path
 
 def main():
+    def write_report(
+            writer: "_csv._writer",
+            started_at: datetime,
+            name: str,
+            status: str,
+            mtime: datetime | None = None,
+            original_bytes: int | None = None,
+            compressed_bytes: int | None = None,
+            duration_download: float | None = None,
+            duration_compress: float | None = None,
+            duration_upload: float | None = None,
+            duration: float | None = None,
+        ):
+        row: list[str| None] = [
+            iso8601(started_at),
+            name,
+            status, 
+            iso8601(mtime) if mtime else None,
+            str(original_bytes) if original_bytes is not None else None,
+            str(compressed_bytes) if compressed_bytes is not None else None, 
+            str(duration_download * 1000) if duration_download is not None else None, 
+            str(duration_compress * 1000) if duration_compress is not None else None,
+            str(duration_upload * 1000) if duration_upload is not None else None,
+            str(duration * 1000) if duration is not None else None,
+        ]
+        writer.writerow([value if value is not None else "" for value in row])
+
+    def do_compress(input_path: str, output_path: str) -> subprocess.CompletedProcess:
+        command = [
+            "ffmpeg", 
+            "-y", # overwrite
+            "-loglevel", "error",
+            "-i", input_path, 
+            "-map", "0", 
+            "-crf", "28", 
+            "-c:v", "libx264", 
+            "-c:a", "copy", 
+            output_path,
+        ]
+        return subprocess.run(command)
+
+    def set_timestamp(source_stat: os.stat_result, output: Path):
+        os.utime(output, (source_stat.st_atime, source_stat.st_mtime))
+
     for source in source_dir.glob("*.mp4"):
-        with tempfile.NamedTemporaryFile(suffix=source.suffix) as copy:
-            with tempfile.NamedTemporaryFile(suffix=source.suffix) as 
-            shutil.copy(source, copy.name)
-            
-            
-            shutil.copy()
-            source.
-
-        target = target_dir / source.name
-        if target.exists():
-            print(f"{source.name}: already exists in the destination.", file=sys.stderr)
-            continue
-
+        start = time.perf_counter()
         
-        output_file = target_dir / source.name
+        with report.open(mode="a", newline="", encoding="utf-8") as report_file:
+            report_writer = csv.writer(report_file)
+            started_at = datetime.now(tz=timezone.utc)
+
+            try:
+                destination = target_dir / source.name
+                if destination.exists():
+                    print(f"{source.name}: already exists in the destination. skipped.")
+                    write_report(report_writer, started_at, source.name, "skipped")
+                    continue
+
+                with temporary_path(suffix=source.suffix) as copy:
+                    download_start = time.perf_counter()
+                    shutil.copy(source, copy)
+                    download_end = time.perf_counter()
+
+                    with temporary_path(suffix=source.suffix) as output:
+                        compress_start = time.perf_counter()
+                        result = do_compress(str(copy), str(output))
+                        result.check_returncode()
+
+                        compress_end = time.perf_counter()
+                        
+                        source_stat = source.stat()
+                        output_stat = output.stat()
+                        set_timestamp(source_stat, output)
+
+                        source_mtime = datetime.fromtimestamp(source_stat.st_mtime, tz=timezone.utc)
+
+                        upload_start = time.perf_counter()
+                        shutil.move(output, destination)
+                        upload_end = time.perf_counter()
+                        
+                        shutil.move(source, trash_dir / source.name)
+
+                        duration_compress = compress_end - compress_start
+                        duration = upload_end - start
+
+                        print(f"{source.name}: completed in {duration:.3f} seconds. (compress: {(duration_compress):.3f} seconds)", flush=True)
+                        write_report(report_writer, started_at, source.name, "successful", source_mtime, source_stat.st_size, output_stat.st_size, download_end - download_start, duration_compress, upload_end - upload_start, duration)
+                        report_file.flush()
+
+            except KeyboardInterrupt as e:
+                raise e
+
+            except subprocess.CalledProcessError as e:
+                print(f"{source.name}: failed.")
+                print(e.stderr, file=sys.stderr)
+                write_report(report_writer, started_at, source.name, "failed")
+                
+            except:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                print("".join(traceback.format_exception(exc_type, exc_value, exc_traceback)), file=sys.stderr)
+                write_report(report_writer, started_at, source.name, "failed")
 
 
 if __name__ == "__main__":
