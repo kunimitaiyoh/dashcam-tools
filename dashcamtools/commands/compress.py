@@ -20,6 +20,7 @@ parser.add_argument("source_dir", metavar="source-dir", type=Path)
 parser.add_argument("target_dir", metavar="target-dir", type=Path)
 parser.add_argument("trash_dir", metavar="trash-dir", type=Path)
 parser.add_argument("--report", type=Path)
+parser.add_argument("--nvenc", action="store_true")
 
 args = parser.parse_args()
 
@@ -27,6 +28,7 @@ source_dir: Path = args.source_dir
 target_dir: Path = args.target_dir
 trash_dir: Path = args.trash_dir
 report: Path = args.report if args.report is not None else null_path
+nvenc: bool = args.nvenc
 
 def main():
     def write_report(
@@ -57,18 +59,34 @@ def main():
         writer.writerow([value if value is not None else "" for value in row])
 
     def do_compress(input_path: str, output_path: str) -> subprocess.CompletedProcess:
-        command = [
-            "ffmpeg", 
-            "-y", # overwrite
-            "-loglevel", "error",
-            "-i", input_path, 
-            "-map", "0", 
-            "-crf", "28", 
-            "-c:v", "libx264", 
-            "-c:a", "copy", 
-            output_path,
-        ]
-        return subprocess.run(command)
+        def resolve_command():
+            if nvenc:
+                return [
+                    "ffmpeg", 
+                    "-y", # overwrite
+                    "-loglevel", "error",
+                    "-i", input_path, 
+                    "-map", "0",
+                    "-c:v", "h264_nvenc", 
+                    "-c:a", "copy",
+                    "-cq", "30",
+                    "-preset", "p7",
+                    "-profile", "high",
+                    output_path,
+                ]
+            else:
+                return [
+                    "ffmpeg", 
+                    "-y", # overwrite
+                    "-loglevel", "error",
+                    "-i", input_path, 
+                    "-map", "0", 
+                    "-crf", "28", 
+                    "-c:v", "libx264", 
+                    "-c:a", "copy", 
+                    output_path,
+                ]
+        return subprocess.run(resolve_command())
 
     def set_timestamp(source_stat: os.stat_result, output: Path):
         os.utime(output, (source_stat.st_atime, source_stat.st_mtime))

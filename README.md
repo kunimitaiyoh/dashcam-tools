@@ -22,5 +22,5 @@ set-timestamp -q '*.mp4' //blanca/共有/Y-4K/イベント記録 //blanca/共有
 ```
 
 ```bash
-compress --report //blanca/共有/Y-4K/report.csv //blanca/共有/Y-4K/{Raw,Archive,Trash} 2>>error.log | tee -a info.log
+compress --report //blanca/共有/Y-4K/report.csv --nvenc //blanca/共有/Y-4K/{Raw,Archive,Trash} 2>>error.log | tee -a info.log
 ```
