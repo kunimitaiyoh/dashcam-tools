@@ -91,7 +91,8 @@ def main():
     def set_timestamp(source_stat: os.stat_result, output: Path):
         os.utime(output, (source_stat.st_atime, source_stat.st_mtime))
 
-    for source in source_dir.glob("*.mp4"):
+    sources = sorted(source_dir.glob("*.mp4"), key=os.path.getmtime)
+    for source in sources:
         start = time.perf_counter()
         
         with report.open(mode="a", newline="", encoding="utf-8") as report_file:
