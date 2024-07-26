@@ -108,7 +108,7 @@ def main():
                 destination = target_dir / source.name
                 if destination.exists():
                     trash_file = move_to_trash(source)
-                    print(f"{source.name}: already exists in the destination. skipped. (moved to: ${trash_file})")
+                    print(f"{source.name}: already exists in the destination. skipped. (moved to: {trash_file})")
                     write_report(report_writer, started_at, source.name, "skipped")
                     continue
 
