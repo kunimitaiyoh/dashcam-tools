@@ -10,7 +10,7 @@ import sys
 import time 
 import traceback
 
-from dashcamtools.util import iso8601, temporary_path
+from dashcamtools.util import iso8601, resolve_unique_path, temporary_path
 
 
 null_path = Path("NUL" if os.name == "nt" else "/dev/null")
@@ -91,6 +91,11 @@ def main():
     def set_timestamp(source_stat: os.stat_result, output: Path):
         os.utime(output, (source_stat.st_atime, source_stat.st_mtime))
 
+    def move_to_trash(source: Path) -> Path:
+        destination = resolve_unique_path(trash_dir / source.name)
+        shutil.move(source, destination)
+        return destination
+
     sources = sorted(source_dir.glob("*.mp4"), key=os.path.getmtime)
     for source in sources:
         start = time.perf_counter()
@@ -102,7 +107,8 @@ def main():
             try:
                 destination = target_dir / source.name
                 if destination.exists():
-                    print(f"{source.name}: already exists in the destination. skipped.")
+                    trash_file = move_to_trash(source)
+                    print(f"{source.name}: already exists in the destination. skipped. (moved to: ${trash_file})")
                     write_report(report_writer, started_at, source.name, "skipped")
                     continue
 
@@ -128,7 +134,7 @@ def main():
                         shutil.move(output, destination)
                         upload_end = time.perf_counter()
                         
-                        shutil.move(source, trash_dir / source.name)
+                        move_to_trash(source)
 
                         duration_compress = compress_end - compress_start
                         duration = upload_end - start
