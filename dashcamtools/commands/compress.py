@@ -1,7 +1,7 @@
 import _csv
 import argparse
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 import os
 from pathlib import Path
 import shutil
@@ -10,25 +10,22 @@ import sys
 import time 
 import traceback
 
-from dashcamtools.util import iso8601, resolve_unique_path, temporary_path
-
-
-null_path = Path("NUL" if os.name == "nt" else "/dev/null")
+from dashcamtools.orm import get_db, Log, LogSeverity, Report, ReportStatus, Video
+from dashcamtools.util import iso8601, resolve_unique_path, temporary_path, Snowflake
+from dashcamtools.repositories import LogRepository, ReportRepository, VideoRepository
 
 parser = argparse.ArgumentParser()
-parser.add_argument("source_dir", metavar="source-dir", type=Path)
-parser.add_argument("target_dir", metavar="target-dir", type=Path)
-parser.add_argument("trash_dir", metavar="trash-dir", type=Path)
-parser.add_argument("--report", type=Path)
+parser.add_argument("storage_dir", metavar="storage-dir", type=Path)
 parser.add_argument("--nvenc", action="store_true")
 
 args = parser.parse_args()
 
-source_dir: Path = args.source_dir
-target_dir: Path = args.target_dir
-trash_dir: Path = args.trash_dir
-report: Path = args.report if args.report is not None else null_path
+storage_dir: Path = args.storage_dir
 nvenc: bool = args.nvenc
+
+source_dir: Path = storage_dir / "Raw"
+target_dir: Path = storage_dir / "Archive"
+trash_dir: Path = storage_dir / "Trash"
 
 def main():
     def write_report(
@@ -96,65 +93,105 @@ def main():
         shutil.move(source, destination)
         return destination
 
-    sources = sorted(source_dir.glob("*.mp4"), key=os.path.getmtime)
-    for source in sources:
-        start = time.perf_counter()
-        
-        with report.open(mode="a", newline="", encoding="utf-8") as report_file:
-            report_writer = csv.writer(report_file)
-            started_at = datetime.now(tz=timezone.utc)
+    with get_db() as db:
+        video_repository = VideoRepository(db)
+        report_repository = ReportRepository(db)
+        log_repository = LogRepository(db, snowflake=Snowflake(machine_id=0))
 
+        def print_log(text: str, severity: LogSeverity = LogSeverity.INFO):
             try:
-                destination = target_dir / source.name
-                if destination.exists():
-                    trash_file = move_to_trash(source)
-                    print(f"{source.name}: already exists in the destination. skipped. (moved to: {trash_file})")
-                    write_report(report_writer, started_at, source.name, "skipped")
-                    continue
+                log_repository.create(Log(severity=severity, text=text, timestamp=datetime.now(tz=timezone.utc)))
+            except Exception as e:
+                print(e, file=sys.stderr)
+                print(text, file=sys.stderr)
 
-                with temporary_path(suffix=source.suffix) as copy:
-                    download_start = time.perf_counter()
-                    shutil.copy(source, copy)
-                    download_end = time.perf_counter()
+        # source_dir からすべてのファイルを取得し、それに応じて videos レコードを追加します。
+        sources = list(source_dir.glob("*.mp4"))
+        existing_video_names: set[str] = { record.name for record in video_repository.list_by_names([source.name for source in sources]) }
+        
+        for source in [source for source in sources if source.name not in existing_video_names]:
+            mtime = datetime.fromtimestamp(os.path.getmtime(source), tz=UTC)
+            record = Video(name=source.name, mtime=mtime)
+            video_repository.add(record)
+        db.commit()
+        
+        for source in sources:
+            start = time.perf_counter()
+            started_at = datetime.now(tz=timezone.utc)
+            report_repository.create(Report(started_at=started_at, name=source.name, status=ReportStatus.SKIPPED))
+            print_log(f"{source.name}: already exists in the destination. skipped.")
 
-                    with temporary_path(suffix=source.suffix) as output:
-                        compress_start = time.perf_counter()
-                        result = do_compress(str(copy), str(output))
-                        result.check_returncode()
+            
+            # try:
+            #     destination = target_dir / source.name
+            #     if destination.exists():
+            #         trash_file = move_to_trash(source)
 
-                        compress_end = time.perf_counter()
-                        
-                        source_stat = source.stat()
-                        output_stat = output.stat()
-                        set_timestamp(source_stat, output)
-
-                        source_mtime = datetime.fromtimestamp(source_stat.st_mtime, tz=timezone.utc)
-
-                        upload_start = time.perf_counter()
-                        shutil.move(output, destination)
-                        upload_end = time.perf_counter()
-                        
-                        move_to_trash(source)
-
-                        duration_compress = compress_end - compress_start
-                        duration = upload_end - start
-
-                        print(f"{source.name}: completed in {duration:.3f} seconds. (compress: {(duration_compress):.3f} seconds)", flush=True)
-                        write_report(report_writer, started_at, source.name, "successful", source_mtime, source_stat.st_size, output_stat.st_size, download_end - download_start, duration_compress, upload_end - upload_start, duration)
-                        report_file.flush()
-
-            except KeyboardInterrupt as e:
-                raise e
-
-            except subprocess.CalledProcessError as e:
-                print(f"{source.name}: failed.")
-                print(e.stderr, file=sys.stderr)
-                write_report(report_writer, started_at, source.name, "failed")
+            #         print_log(f"{source.name}: already exists in the destination. skipped. (moved to: {trash_file})")
+            #         # write_report(report_writer, started_at, source.name, "skipped")
+            #         report_repository.create(Report(started_at=started_at, name=source.name, status=ReportStatus.SKIPPED))
+            #         continue
                 
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                print("".join(traceback.format_exception(exc_type, exc_value, exc_traceback)), file=sys.stderr)
-                write_report(report_writer, started_at, source.name, "failed")
+
+    # sources = sorted(source_dir.glob("*.mp4"), key=os.path.getmtime)
+    # for source in sources:
+    #     start = time.perf_counter()
+        
+    #     with report.open(mode="a", newline="", encoding="utf-8") as report_file:
+    #         report_writer = csv.writer(report_file)
+    #         started_at = datetime.now(tz=timezone.utc)
+
+    #         try:
+    #             destination = target_dir / source.name
+    #             if destination.exists():
+    #                 trash_file = move_to_trash(source)
+    #                 print(f"{source.name}: already exists in the destination. skipped. (moved to: {trash_file})")
+    #                 write_report(report_writer, started_at, source.name, "skipped")
+    #                 continue
+
+    #             with temporary_path(suffix=source.suffix) as copy:
+    #                 download_start = time.perf_counter()
+    #                 shutil.copy(source, copy)
+    #                 download_end = time.perf_counter()
+
+    #                 with temporary_path(suffix=source.suffix) as output:
+    #                     compress_start = time.perf_counter()
+    #                     result = do_compress(str(copy), str(output))
+    #                     result.check_returncode()
+
+    #                     compress_end = time.perf_counter()
+                        
+    #                     source_stat = source.stat()
+    #                     output_stat = output.stat()
+    #                     set_timestamp(source_stat, output)
+
+    #                     source_mtime = datetime.fromtimestamp(source_stat.st_mtime, tz=timezone.utc)
+
+    #                     upload_start = time.perf_counter()
+    #                     shutil.move(output, destination)
+    #                     upload_end = time.perf_counter()
+                        
+    #                     move_to_trash(source)
+
+    #                     duration_compress = compress_end - compress_start
+    #                     duration = upload_end - start
+
+    #                     print(f"{source.name}: completed in {duration:.3f} seconds. (compress: {(duration_compress):.3f} seconds)", flush=True)
+    #                     write_report(report_writer, started_at, source.name, "successful", source_mtime, source_stat.st_size, output_stat.st_size, download_end - download_start, duration_compress, upload_end - upload_start, duration)
+    #                     report_file.flush()
+
+    #         except KeyboardInterrupt as e:
+    #             raise e
+
+    #         except subprocess.CalledProcessError as e:
+    #             print(f"{source.name}: failed.")
+    #             print(e.stderr, file=sys.stderr)
+    #             write_report(report_writer, started_at, source.name, "failed")
+                
+    #         except:
+    #             exc_type, exc_value, exc_traceback = sys.exc_info()
+    #             print("".join(traceback.format_exception(exc_type, exc_value, exc_traceback)), file=sys.stderr)
+    #             write_report(report_writer, started_at, source.name, "failed")
 
 
 if __name__ == "__main__":

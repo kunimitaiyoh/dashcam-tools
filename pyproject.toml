@@ -17,6 +17,8 @@ ssim = "dashcamtools.commands.ssim:main"
 [tool.poetry.dependencies]
 python = "^3.10"
 win32-setctime = "^1.1.0"
+python-dotenv = "^1.0.1"
+sqlalchemy = "^2.0.32"
 
 [build-system]
 requires = ["poetry-core"]
