@@ -13,7 +13,7 @@ from sqlalchemy.types import DateTime, String
 from dashcamtools.settings import DATABASE_URL
 
 
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base: Type[DeclarativeBase] = declarative_base()
@@ -25,10 +25,6 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
-
-with get_db() as db:
-    pass
-
 
 class UTCTimestamp(TypeDecorator):
     impl = Text

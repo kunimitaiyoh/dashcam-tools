@@ -1,21 +1,27 @@
 from contextlib import contextmanager
 from datetime import datetime
-import os
 from pathlib import Path
-from typing import Generator
 import tempfile
 import time
+from typing import Generator
+import uuid
 
 # 2010-11-04T01:42:54.657Z
 ORIGINAL_TIMESTAMP = 1288834974657
 
 @contextmanager
-def temporary_path(suffix: str | None = None) -> Generator[Path, None, None]:
-    temp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    path = Path(temp.name)
+def temporary_path(suffix: str | None = None, dir: Path | None = None) -> Generator[Path, None, None]:
+    
     try:
-        temp.close()
-        yield path
+        if dir is not None:
+            path = Path(dir, str(uuid.uuid4()))
+            path = path.with_suffix(suffix=suffix) if suffix else path
+            yield path
+        else:
+            temp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            path = Path(temp.name)
+            temp.close()
+            yield path
     finally:
         path.unlink(missing_ok=True)
 
