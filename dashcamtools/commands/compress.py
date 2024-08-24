@@ -57,7 +57,6 @@ def main():
                     "-c:a", "copy", 
                     output_path,
                 ]
-        print(resolve_command())
         return subprocess.run(resolve_command())
 
     def set_timestamp(source_stat: os.stat_result, output: Path):
@@ -67,9 +66,6 @@ def main():
         destination = resolve_unique_path(trash_dir / source.name)
         shutil.move(source, destination)
         return destination
-
-    for dir in [source_dir, target_dir, trash_dir, remote_temp_dir]:
-        dir.mkdir(parents=True, exist_ok=True)
 
     with get_db() as db:
         video_repository = VideoRepository(db)
@@ -82,6 +78,11 @@ def main():
                 log_repository.create(Log(severity=severity, text=text, timestamp=datetime.now(tz=timezone.utc)))
             except Exception as e:
                 print(e, file=sys.stderr)
+
+        print_log(f"Starting job... (storage_dir: {storage_dir}, nvenc: {nvenc})")
+
+        for dir in [source_dir, target_dir, trash_dir, remote_temp_dir]:
+            dir.mkdir(parents=True, exist_ok=True)
 
         # source_dir からすべてのファイルを取得し、それに応じて videos レコードを追加します。
         print_log("First, get all files from the source directory...")
