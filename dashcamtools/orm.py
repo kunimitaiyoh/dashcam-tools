@@ -90,6 +90,7 @@ class Report(Base):
     mtime: Mapped[datetime] = mapped_column(UTCTimestamp, nullable=True)
     original_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
     compressed_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
+    codec: Mapped[str] = mapped_column(String(255), nullable=True)
     duration_download: Mapped[float] = mapped_column(Double, nullable=True)
     duration_compress: Mapped[float] = mapped_column(Double, nullable=True)
     duration_upload: Mapped[float] = mapped_column(Double, nullable=True)

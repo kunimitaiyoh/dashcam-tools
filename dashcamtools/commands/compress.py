@@ -145,7 +145,9 @@ def main():
                         duration = upload_end - start
 
                         print_log(f"{source.name}: completed in {duration:.3f} seconds. (compress: {(duration_compress):.3f} seconds)")
-                        report_repository.create(Report(started_at=started_at, name=source.name, status=ReportStatus.SUCCESSFUL, mtime=source_mtime, original_bytes=source_stat.st_size, compressed_bytes=output_stat.st_size, duration_download=download_end - download_start, duration_compress=duration_compress, duration_upload=upload_end - upload_start, duration=duration))
+                        
+                        codec = "h264_nvenc" if nvenc else "libx264"
+                        report_repository.create(Report(started_at=started_at, name=source.name, status=ReportStatus.SUCCESSFUL, mtime=source_mtime, original_bytes=source_stat.st_size, compressed_bytes=output_stat.st_size, codec=codec, duration_download=download_end - download_start, duration_compress=duration_compress, duration_upload=upload_end - upload_start, duration=duration))
 
             except KeyboardInterrupt as e:
                 raise e
