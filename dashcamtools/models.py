@@ -1,10 +1,8 @@
 from pathlib import Path
 
-
 class VideoPart:
     def __init__(self, path: Path, timestamp: int, is_front: str, is_event: bool) -> None:
         self.path = path
-
         # タイムスタンプ。分単位の整数（エポック秒を 60 でわったもの）。
         self.timestamp = timestamp
         self.is_event = is_event
