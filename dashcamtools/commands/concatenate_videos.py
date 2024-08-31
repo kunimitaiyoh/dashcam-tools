@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 
+
 PATTERN_VIDEO_NAME = re.compile(r"^\d{8}_(\d{10})_NF.MP4$", flags=re.I)
 FORMAT_TIMESTAMP = "%y%m%d%H%M"
 
@@ -13,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("videos")
 parser.add_argument("destination")
 
-args = args = parser.parse_args()
+args = parser.parse_args()
 
 videos = Path(args.videos)
 destination =  Path(args.destination)
@@ -67,6 +68,7 @@ def main():
     paths = sorted([video for video in videos.glob("*.mp4") if PATTERN_VIDEO_NAME.search(video.name)], key=lambda p: p.stem[9:])
     groups = group_videos(paths)
     
+    print(f"Concatenating {len(groups)} groups...")
     for group in groups:
         timestamp = datetime.strptime(PATTERN_VIDEO_NAME.search(group[0].name)[1], FORMAT_TIMESTAMP)
         timestamp.replace(year=2000 + timestamp.year)
@@ -76,6 +78,7 @@ def main():
             print(f"File {output.name} already exists. Skipped.", file=sys.stderr)
             continue
 
+        print(f"Concatenating {len(group)} video(s)...")
         concatenate_videos(group, output)
 
 if __name__ == "__main__":

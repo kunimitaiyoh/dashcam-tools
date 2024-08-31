@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "dashcamtools"
+version = "0.1.0"
+description = "Dashcam Tools"
+authors = ["Hoarders"]
+readme = "README.md"
+
+[tool.poetry.scripts]
+# edit-videos = "dashcamtools.commands.concat_videos:main"
+set-timestamp = "dashcamtools.commands.set_timestamp:main"
+compress = "dashcamtools.commands.compress:main"
+ssim = "dashcamtools.commands.ssim:main"
+
+# TODO: 全動画のコピー処理
+# TODO: 動画のコピー、変換、アップロード、削除
+
+[tool.poetry.dependencies]
+python = "^3.10"
+win32-setctime = "^1.1.0"
+python-dotenv = "^1.0.1"
+sqlalchemy = "^2.0.32"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
