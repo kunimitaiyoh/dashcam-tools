@@ -18,13 +18,9 @@ class VideoRepository:
         return self.db.execute(select(Video).filter(Video.name == name)).scalar()
     
     def list_by_names(self, names: Iterable[str]) -> Sequence[Video]:
-        query = select(Video).filter(Video.name.in_(names))
+        query = select(Video).filter(Video.name.in_(names)).order_by(Video.mtime.asc())
         return self.db.execute(query).scalars().all()
     
-    def list_unarchived(self) -> Sequence[Video]:
-        query = select(Video).filter(Video.is_archived == False).order_by(Video.mtime.asc)
-        return self.db.execute(query).scalars().all()
-
 class ReportRepository:
     def __init__(self, db: Session):
         self.db = db

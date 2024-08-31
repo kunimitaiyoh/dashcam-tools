@@ -99,8 +99,9 @@ def main():
         db.commit()
         print_log("Collecting information of files completed.")
 
-        source_videos = { video.name: video for video in video_repository.list_by_names(source_names) }
-        for source, video in [(source, source_videos[source.name]) for source in sources]:
+        source_videos = video_repository.list_by_names(source_names) 
+        source_paths = { path.name: path for path in sources }
+        for source, video in [(source_paths[source_video.name], source_video) for source_video in source_videos]:
             start = time.perf_counter()
             started_at = datetime.now(tz=timezone.utc)
         
