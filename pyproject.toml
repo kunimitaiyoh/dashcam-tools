@@ -10,6 +10,7 @@ readme = "README.md"
 set-timestamp = "dashcamtools.commands.set_timestamp:main"
 compress = "dashcamtools.commands.compress:main"
 ssim = "dashcamtools.commands.ssim:main"
+fill-attributes = "dashcamtools.commands.fill_attributes:main"
 
 # TODO: 全動画のコピー処理
 # TODO: 動画のコピー、変換、アップロード、削除

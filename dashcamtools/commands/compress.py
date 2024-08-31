@@ -1,18 +1,16 @@
-import _csv
 import argparse
-import csv
 from datetime import datetime, timezone, UTC
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import time 
+import time
 import traceback
 
-from dashcamtools.orm import get_db, Log, LogSeverity, Report, ReportStatus, Video
+from dashcamtools.orm import get_db, Log, LogSeverity, Report, ReportStatus, VideoFile
 from dashcamtools.util import iso8601, resolve_unique_path, temporary_path, Snowflake
-from dashcamtools.repositories import LogRepository, ReportRepository, VideoRepository
+from dashcamtools.repositories import LogRepository, ReportRepository, VideoFileRepository
 
 parser = argparse.ArgumentParser()
 parser.add_argument("storage_dir", metavar="storage-dir", type=Path)
@@ -68,7 +66,7 @@ def main():
         return destination
 
     with get_db() as db:
-        video_repository = VideoRepository(db)
+        video_repository = VideoFileRepository(db)
         report_repository = ReportRepository(db)
         log_repository = LogRepository(db, snowflake=Snowflake(machine_id=0))
 
@@ -94,7 +92,7 @@ def main():
         print_log(f"Collecting information of {len(new_source)} file(s)...")
         for source in new_source:
             mtime = datetime.fromtimestamp(os.path.getmtime(source), tz=UTC)
-            record = Video(name=source.name, mtime=mtime)
+            record = VideoFile(name=source.name, mtime=mtime)
             video_repository.add(record)
         db.commit()
         print_log("Collecting information of files completed.")

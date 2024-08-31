@@ -1,16 +1,17 @@
 from contextlib import contextmanager
 from datetime import datetime, UTC
 import enum
+import re
 from typing import Optional, Iterator, Type
 
 from sqlalchemy import Dialect, String, Boolean, Text, ForeignKey, Date, Integer, BigInteger, Double, UniqueConstraint, TypeDecorator, create_engine
-from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker, Session
-
-from sqlalchemy import Dialect, String, TypeDecorator, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker, DeclarativeBase
+from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker, Session, declarative_base, sessionmaker, DeclarativeBase
 from sqlalchemy.types import DateTime, String
 
 from dashcamtools.settings import DATABASE_URL
+
+PATTERN_VIDEO_NAME = re.compile(r"^\d{8}_(\d{10})_(N|G|S)(F|R).MP4$", flags=re.I)
+FORMAT_TIMESTAMP = "%y%m%d%H%M"
 
 
 engine = create_engine(DATABASE_URL)
@@ -71,15 +72,59 @@ class LogSeverity(enum.Enum):
     INFO = "info"
     ERROR = "error"
 
-class Video(Base):
-    __tablename__ = "videos"
+class VideoDirection(enum.Enum):
+    FRONT = "front"
+    REAR = "rear"
+
+class VideoFile(Base):
+    __tablename__ = "video_files"
 
     name: Mapped[str] = mapped_column(String(255), primary_key=True)
-    # is_rear: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    # is_event: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    # recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    direction: Mapped[VideoDirection] = mapped_column(StrEnum(VideoDirection), nullable=True)
+    is_event: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     mtime: Mapped[datetime] = mapped_column(UTCTimestamp, nullable=False, index=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    def fill_attributes(self) -> "VideoFile":
+        matched = PATTERN_VIDEO_NAME.search(self.name)
+        timestamp = datetime.strptime(matched[1], FORMAT_TIMESTAMP)
+        timestamp.replace(year=2000 + timestamp.year)
+
+        self.recorded_at = timestamp
+        self.is_event = VideoFile.prase_event_type(matched[2])
+        self.direction = VideoFile.parse_direction(matched[3])
+        return self
+
+    @property
+    def unix_minute(self) -> int:
+        return int(self.recorded_at.timestamp()) // 60
+
+    @staticmethod
+    def from_name(name: str, mtime: datetime) -> "VideoFile":
+        return VideoFile(name=name, mtime=mtime).fill_attributes()
+
+    @staticmethod
+    def prase_event_type(value: str) -> bool:
+        match value:
+            case "N":
+                return False
+            case "G":
+                return True
+            case "S":
+                return True
+            case _:
+                raise ValueError()
+
+    @staticmethod
+    def parse_direction(value: str) -> VideoDirection:
+        match value:
+            case "F":
+                return VideoDirection.FRONT
+            case "R":
+                return VideoDirection.REAR
+            case _:
+                raise ValueError()
 
 class Report(Base):
     __tablename__ = "reports"

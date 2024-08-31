@@ -3,27 +3,31 @@ from typing import Iterable, Sequence
 from sqlalchemy import func, delete, select, Delete, Select
 from sqlalchemy.orm import Session
 
-from dashcamtools.orm import Log, Report, Video
+from dashcamtools.orm import Log, Report, VideoFile
 from dashcamtools.util import Snowflake
 
-class VideoRepository:
+class VideoFileRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def add(self, video: Video) -> Video:
+    def add(self, video: VideoFile) -> VideoFile:
         self.db.add(video)
         return video
     
-    def find_by_name(self, name: str) -> Video | None:
-        return self.db.execute(select(Video).filter(Video.name == name)).scalar()
-    
-    def list_by_names(self, names: Iterable[str]) -> Sequence[Video]:
-        query = select(Video).filter(Video.name.in_(names))
+    def find_by_name(self, name: str) -> VideoFile | None:
+        return self.db.execute(select(VideoFile).filter(VideoFile.name == name)).scalar()
+
+    def list_by_names(self, names: Iterable[str]) -> Sequence[VideoFile]:
+        query = select(VideoFile).filter(VideoFile.name.in_(names))
         return self.db.execute(query).scalars().all()
-    
-    def list_unarchived(self) -> Sequence[Video]:
-        query = select(Video).filter(Video.is_archived == False).order_by(Video.mtime.asc)
-        return self.db.execute(query).scalars().all()
+
+    def fill_attributes_all(self) -> None:
+        query = select(VideoFile).filter(VideoFile.is_rear == None or VideoFile.is_rear == None or VideoFile.recorded_at == None)
+        for video in self.db.execute(query).scalars().all():
+            video.fill_attributes()
+            print(video)
+            print(video.recorded_at)
+        
 
 class ReportRepository:
     def __init__(self, db: Session):
