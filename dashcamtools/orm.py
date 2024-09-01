@@ -10,7 +10,7 @@ from sqlalchemy.types import DateTime, String
 
 from dashcamtools.settings import DATABASE_URL
 
-PATTERN_VIDEO_NAME = re.compile(r"^\d{8}_(\d{10})_(N|G|S)(F|R).MP4$", flags=re.I)
+PATTERN_VIDEO_NAME = re.compile(r"^(\d{8})_(\d{10})_(N|G|S)(F|R).MP4$", flags=re.I)
 FORMAT_TIMESTAMP = "%y%m%d%H%M"
 
 
@@ -29,6 +29,7 @@ def get_db() -> Iterator[Session]:
 
 class UTCTimestamp(TypeDecorator):
     impl = Text
+    cache_ok = True
 
     def process_bind_param(self, value: datetime | None, dialect):
         if value is not None:
@@ -45,6 +46,7 @@ class UTCTimestamp(TypeDecorator):
 # see: https://qiita.com/methane/items/dd19bc7be27a5e991cca
 class StrEnum(TypeDecorator):
     impl = String
+    cache_ok = True
 
     def __init__(self, enum: Type[enum.Enum], *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -82,30 +84,29 @@ class VideoFile(Base):
     name: Mapped[str] = mapped_column(String(255), primary_key=True)
     direction: Mapped[VideoDirection] = mapped_column(StrEnum(VideoDirection), nullable=True)
     is_event: Mapped[bool] = mapped_column(Boolean, nullable=True)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    recorded_at_m: Mapped[int] = mapped_column(Integer, nullable=True, index=True)
     mtime: Mapped[datetime] = mapped_column(UTCTimestamp, nullable=False, index=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     def fill_attributes(self) -> "VideoFile":
         matched = PATTERN_VIDEO_NAME.search(self.name)
-        timestamp = datetime.strptime(matched[1], FORMAT_TIMESTAMP)
-        timestamp.replace(year=2000 + timestamp.year)
-
-        self.recorded_at = timestamp
-        self.is_event = VideoFile.prase_event_type(matched[2])
-        self.direction = VideoFile.parse_direction(matched[3])
+        timestamp = datetime.strptime(matched[2], FORMAT_TIMESTAMP)
+        
+        self.recorded_at_m = int(timestamp.timestamp()) // 60
+        self.direction = VideoFile.parse_direction(matched[4])
+        self.is_event = VideoFile.parse_event_type(matched[3])
         return self
 
     @property
-    def unix_minute(self) -> int:
-        return int(self.recorded_at.timestamp()) // 60
+    def recorded_at(self) -> datetime:
+        return datetime.fromtimestamp(self.recorded_at_m * 60)
 
     @staticmethod
     def from_name(name: str, mtime: datetime) -> "VideoFile":
         return VideoFile(name=name, mtime=mtime).fill_attributes()
 
     @staticmethod
-    def prase_event_type(value: str) -> bool:
+    def parse_event_type(value: str) -> bool:
         match value:
             case "N":
                 return False

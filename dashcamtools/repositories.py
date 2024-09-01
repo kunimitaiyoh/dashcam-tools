@@ -18,15 +18,17 @@ class VideoFileRepository:
         return self.db.execute(select(VideoFile).filter(VideoFile.name == name)).scalar()
 
     def list_by_names(self, names: Iterable[str]) -> Sequence[VideoFile]:
-        query = select(VideoFile).filter(VideoFile.name.in_(names)).order_by(Video.mtime.asc())
+        query = select(VideoFile).filter(VideoFile.name.in_(names)).order_by(VideoFile.mtime.asc())
         return self.db.execute(query).scalars().all()
 
     def fill_attributes_all(self) -> None:
-        query = select(VideoFile).filter(VideoFile.is_rear == None or VideoFile.is_rear == None or VideoFile.recorded_at == None)
+        query = (
+            select(VideoFile)
+                .filter((VideoFile.direction == None) | (VideoFile.is_event == None) | (VideoFile.recorded_at_m == None))
+                .order_by(VideoFile.mtime.asc())
+        )
         for video in self.db.execute(query).scalars().all():
             video.fill_attributes()
-            print(video)
-            print(video.recorded_at)
 
 class ReportRepository:
     def __init__(self, db: Session):

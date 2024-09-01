@@ -11,4 +11,4 @@ def main():
     with get_db() as db:
         video_repository = VideoFileRepository(db)
         video_repository.fill_attributes_all()
-        # db.commit()
+        db.commit()
