@@ -4,13 +4,13 @@ import { join } from "node:path";
 
 import type { Storage } from "./db/schema";
 
-// findmnt を実行して stdout を返す。該当するマウントがなければ undefined（findmnt は終了コード 1）。
 export type Findmnt = (args: readonly string[]) => string | undefined;
 
 export const runFindmnt: Findmnt = (args) => {
   try {
     return execFileSync("findmnt", [...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
   } catch (error) {
+    // findmnt は該当するマウントがなければ終了コード 1。
     if (error instanceof Error && "status" in error && error.status === 1) return undefined;
     throw error;
   }
